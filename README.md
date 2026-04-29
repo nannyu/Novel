@@ -1,5 +1,5 @@
-先用 novel-outline-researcher 把想法整理成调研报告，
-再交给 novel-studio 生成小说元信息、大纲、时间线、人设与场景并逐步写章；
-大纲可先只做前几章并反复调整，也可后期手写大纲再让 AI 写正文；
-完稿后务必通读、多轮修改，必要时用 novel-qa 做一致性检查。
-整套工具需人工参与各步，适合辅助构思与省码字，而非一键自动生成成品。
+novel：生成小说skill，使用说明参考：https://mp.weixin.qq.com/s/O2xK-NpPXl6OUBEspD7VbQ
+
+history：历史类短文生成skill，用于发布今日头条。
+
+shujukanban：公众号、小红书数据看板。是一个网页，需本地部署，部署后可导入后台的数据即可进行分析。
