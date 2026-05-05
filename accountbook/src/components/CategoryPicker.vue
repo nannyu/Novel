@@ -1,21 +1,13 @@
 <script setup>
+import { getAllCategories } from '../data/categories.js'
+
 defineProps({
   modelValue: String
 })
 
 const emit = defineEmits(['update:modelValue'])
 
-const categories = [
-  { key: 'takeout', icon: '🥡', name: '外卖', bg: '#e8f0ea' },
-  { key: 'dining', icon: '🍜', name: '堂食', bg: '#e4ecf2' },
-  { key: 'grocery', icon: '🛒', name: '买菜', bg: '#f0e8d4' },
-  { key: 'telecom', icon: '📱', name: '通讯', bg: '#ece4f0' },
-  { key: 'credit', icon: '💳', name: '还信用卡', bg: '#f0e4e4' },
-  { key: 'study', icon: '📚', name: '学习', bg: '#e0ece8' },
-  { key: 'fun', icon: '🎮', name: '娱乐', bg: '#f0e8dc' },
-  { key: 'badminton', icon: '🏸', name: '羽毛球', bg: '#e4f0e8' },
-  { key: 'ai', icon: '🤖', name: 'AI', bg: '#e4e8f4' }
-]
+const categories = getAllCategories()
 </script>
 
 <template>

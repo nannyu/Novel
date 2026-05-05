@@ -2,38 +2,64 @@
 import { useRouter } from 'vue-router'
 import { useExpenseStore } from '../stores/expense.js'
 import { formatDateChinese } from '../utils/calendar.js'
+import { getCategoryMap, savingReasonMap } from '../data/categories.js'
 
+const categoryMap = getCategoryMap()
 const router = useRouter()
 const store = useExpenseStore()
-
-const categoryMap = {
-  takeout: { name: '外卖', icon: '🥡', bg: '#e8f0ea' },
-  dining: { name: '堂食', icon: '🍜', bg: '#e4ecf2' },
-  grocery: { name: '买菜', icon: '🛒', bg: '#f0e8d4' },
-  telecom: { name: '通讯', icon: '📱', bg: '#ece4f0' },
-  credit: { name: '还信用卡', icon: '💳', bg: '#f0e4e4' },
-  study: { name: '学习', icon: '📚', bg: '#e0ece8' },
-  fun: { name: '娱乐', icon: '🎮', bg: '#f0e8dc' },
-  badminton: { name: '羽毛球', icon: '🏸', bg: '#e4f0e8' },
-  ai: { name: 'AI', icon: '🤖', bg: '#e4e8f4' }
-}
 
 const paymentLabel = {
   credit: '信用卡',
   cash: '现金'
 }
 
+let longPressTimer = null
+let longPressTriggered = false
+
 function editExpense(id) {
   router.push('/edit/' + id)
+}
+
+function startLongPress(item) {
+  clearLongPress()
+  longPressTriggered = false
+  longPressTimer = window.setTimeout(async () => {
+    longPressTriggered = true
+    const categoryName = categoryMap[item.category]?.name || item.category
+    const confirmed = confirm(`确定删除这笔「${categoryName}」记录吗？\n\n删除后无法恢复。`)
+    if (confirmed) {
+      await store.deleteExpense(item.id)
+    }
+  }, 650)
+}
+
+function clearLongPress() {
+  if (longPressTimer) {
+    window.clearTimeout(longPressTimer)
+    longPressTimer = null
+  }
+}
+
+function handleItemClick(id) {
+  if (longPressTriggered) {
+    longPressTriggered = false
+    return
+  }
+  editExpense(id)
 }
 </script>
 
 <template>
   <div class="expense-list">
-    <div v-if="store.expensesByDate.length === 0" class="empty">
-      <div class="empty-icon">📝</div>
+    <div class="list-heading">
+      <h2>支出明细</h2>
+      <span v-if="store.expensesByDate.length">{{ formatDateChinese(store.expensesByDate[0].date) }}</span>
+    </div>
+
+    <div v-if="store.expensesByDate.length === 0" class="empty glass-card">
+      <div class="empty-icon">＋</div>
       <p class="empty-text">还没有记账记录</p>
-      <p class="empty-hint">点击下方 + 开始记录第一笔</p>
+      <p class="empty-hint">点击下方加号开始记录第一笔</p>
     </div>
 
     <div
@@ -42,57 +68,95 @@ function editExpense(id) {
       class="date-group"
       :style="{ animationDelay: gi * 0.05 + 's' }"
     >
-      <div class="date-header">
-        <span class="date-text">{{ formatDateChinese(group.date) }}</span>
-        <span class="date-tag">支出</span>
-      </div>
-      <div
-        v-for="(item, ii) in group.items"
-        :key="item.id"
-        class="expense-item"
-        :style="{ animationDelay: (gi * 0.05 + ii * 0.03) + 's' }"
-        @click="editExpense(item.id)"
-      >
-        <div class="item-icon" :style="{ background: categoryMap[item.category]?.bg || '#eee' }">
-          {{ categoryMap[item.category]?.icon || '💰' }}
-        </div>
-        <div class="item-info">
-          <span class="item-name">{{ categoryMap[item.category]?.name || item.category }}</span>
-          <span class="item-meta">
-            {{ paymentLabel[item.paymentMethod] || '' }}
-            <template v-if="item.note"> · {{ item.note }}</template>
-          </span>
-        </div>
-        <div class="item-amount">-{{ item.amount.toFixed(2) }}</div>
+      <div v-if="gi > 0" class="date-divider">{{ formatDateChinese(group.date) }}</div>
+      <div class="expense-card glass-card">
+        <button
+          v-for="(item, ii) in group.items"
+          :key="item.id"
+          class="expense-item"
+          :style="{ animationDelay: (gi * 0.05 + ii * 0.03) + 's' }"
+          @click="handleItemClick(item.id)"
+          @pointerdown="startLongPress(item)"
+          @pointerup="clearLongPress"
+          @pointerleave="clearLongPress"
+          @pointercancel="clearLongPress"
+        >
+          <div class="item-icon" :style="{ background: categoryMap[item.category]?.bg || '#eef2fb', color: categoryMap[item.category]?.color || 'var(--accent)' }">
+            {{ categoryMap[item.category]?.icon || '¥' }}
+          </div>
+          <div class="item-info">
+            <span class="item-name">{{ categoryMap[item.category]?.name || item.category }}</span>
+            <span class="item-meta">
+              {{ paymentLabel[item.paymentMethod] || '' }}
+              <template v-if="item.savingAmount"> · 省 {{ item.savingAmount.toFixed(2) }} · {{ savingReasonMap[item.savingReason] || '省钱' }}</template>
+              <template v-if="item.note"> · {{ item.note }}</template>
+            </span>
+          </div>
+          <div class="item-amount">-¥{{ item.amount.toFixed(2) }}</div>
+          <svg class="chevron" width="19" height="19" viewBox="0 0 24 24" fill="none">
+            <path d="M9 5L16 12L9 19" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
       </div>
     </div>
+
+    <div v-if="store.expensesByDate.length > 0" class="end-text">— 没有更多了 —</div>
   </div>
 </template>
 
 <style scoped>
 .expense-list {
-  padding: 0 16px;
+  padding: 0 22px;
+}
+
+.list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.list-heading h2 {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.list-heading span,
+.date-divider {
+  color: #7883a8;
+  font-size: 15px;
+  font-weight: 700;
 }
 
 .empty {
   text-align: center;
-  padding: 48px 0 32px;
+  padding: 44px 20px;
+  border-radius: var(--radius-xl);
 }
 
 .empty-icon {
-  font-size: 40px;
+  width: 52px;
+  height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   margin-bottom: 12px;
-  opacity: 0.6;
+  border-radius: 18px;
+  color: #fff;
+  font-size: 32px;
+  background: linear-gradient(135deg, #7d92ff, #4f5df6);
 }
 
 .empty-text {
-  color: var(--text-secondary);
-  font-size: 15px;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 700;
   margin-bottom: 4px;
 }
 
 .empty-hint {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-muted);
 }
 
@@ -101,82 +165,87 @@ function editExpense(id) {
   animation: fadeInUp 0.35s ease both;
 }
 
-.date-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 4px 8px;
+.date-divider {
+  padding: 0 2px 10px;
 }
 
-.date-text {
-  font-size: 13px;
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.date-tag {
-  font-size: 10px;
-  color: var(--text-muted);
-  background: rgba(44, 24, 16, 0.05);
-  padding: 1px 8px;
-  border-radius: 10px;
-  font-weight: 500;
+.expense-card {
+  overflow: hidden;
+  border-radius: var(--radius-xl);
 }
 
 .expense-item {
-  display: flex;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 54px 1fr auto 20px;
   align-items: center;
-  gap: 12px;
-  padding: 11px 14px;
-  background: var(--bg-card);
-  border-radius: var(--radius-md);
-  margin-bottom: 6px;
+  gap: 14px;
+  padding: 17px 18px;
+  text-align: left;
   cursor: pointer;
-  transition: all 0.15s ease;
-  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s ease, background 0.15s ease;
   animation: fadeInUp 0.35s ease both;
 }
 
+.expense-item + .expense-item {
+  border-top: 1px solid rgba(137, 151, 196, 0.16);
+}
+
 .expense-item:active {
-  transform: scale(0.98);
-  box-shadow: none;
+  transform: scale(0.985);
+  background: rgba(238, 242, 251, 0.5);
 }
 
 .item-icon {
-  width: 38px;
-  height: 38px;
+  width: 48px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 19px;
-  border-radius: 12px;
+  font-size: 24px;
+  border-radius: 17px;
   flex-shrink: 0;
 }
 
 .item-info {
-  flex: 1;
   min-width: 0;
 }
 
 .item-name {
-  font-size: 14px;
-  color: var(--text-primary);
   display: block;
-  font-weight: 500;
+  color: var(--text-primary);
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.25;
 }
 
 .item-meta {
-  font-size: 11px;
-  color: var(--text-muted);
   display: block;
-  margin-top: 2px;
+  margin-top: 6px;
+  color: #7f8aad;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .item-amount {
-  font-family: 'Noto Serif SC', serif;
-  font-size: 16px;
-  font-weight: 600;
   color: var(--danger);
-  flex-shrink: 0;
+  font-size: 20px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.chevron {
+  color: #b3bdd7;
+}
+
+.end-text {
+  margin: 28px 0 12px;
+  color: #9aa4c1;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
 }
 </style>

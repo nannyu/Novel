@@ -49,13 +49,7 @@ function handleKey(key) {
     </div>
     <div class="keys-grid">
       <template v-for="(row, ri) in keys" :key="ri">
-        <button
-          v-for="key in row"
-          :key="key"
-          class="key-btn"
-          :class="{ backspace: key === '⌫', zero: key === '0' }"
-          @click="handleKey(key)"
-        >
+        <button v-for="key in row" :key="key" class="key-btn" :class="{ backspace: key === '⌫' }" @click="handleKey(key)">
           {{ key }}
         </button>
       </template>
@@ -72,59 +66,54 @@ function handleKey(key) {
   display: flex;
   align-items: baseline;
   justify-content: flex-end;
+  gap: 5px;
   padding: 20px 8px 16px;
-  gap: 4px;
 }
 
 .currency {
-  font-size: 22px;
   color: var(--text-muted);
-  font-weight: 300;
+  font-size: 22px;
+  font-weight: 700;
 }
 
 .amount {
-  font-family: 'Noto Serif SC', serif;
-  font-size: 40px;
-  font-weight: 700;
+  min-width: 90px;
   color: var(--text-primary);
-  min-width: 80px;
+  font-size: 42px;
+  font-weight: 800;
   text-align: right;
-  letter-spacing: -1px;
 }
 
 .amount.empty {
   color: var(--text-muted);
-  opacity: 0.4;
+  opacity: 0.46;
 }
 
 .keys-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  gap: 9px;
 }
 
 .key-btn {
-  height: 50px;
-  border-radius: var(--radius-md);
-  background: var(--bg-card);
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
   color: var(--text-primary);
-  font-size: 20px;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.12s ease;
+  background: rgba(255, 255, 255, 0.88);
   box-shadow: var(--shadow-sm);
+  font-size: 21px;
+  font-weight: 800;
+  transition: transform 0.12s ease, background 0.12s ease;
 }
 
 .key-btn:active {
-  background: var(--bg-tertiary);
   transform: scale(0.95);
-  box-shadow: none;
+  background: #eef2fb;
 }
 
 .key-btn.backspace {
-  font-size: 18px;
   color: var(--text-muted);
 }
 </style>

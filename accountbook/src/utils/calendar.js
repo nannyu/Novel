@@ -1,6 +1,5 @@
 import { holidays, extraWorkdays } from '../data/holidays.js'
 
-const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
 const WEEKDAYS_FULL = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
 
 export function isWorkday(dateStr) {
@@ -28,14 +27,13 @@ export function formatDateChinese(dateStr) {
 
 export function getCalendarDays(year, month) {
   const firstDay = new Date(year, month - 1, 1)
-  let startDay = firstDay.getDay() // 0=Sun
-  startDay = startDay === 0 ? 6 : startDay - 1 // Convert to Mon=0
+  let startDay = firstDay.getDay()
+  startDay = startDay === 0 ? 6 : startDay - 1
 
   const daysInMonth = new Date(year, month, 0).getDate()
   const grid = []
   let row = []
 
-  // Fill leading empty cells
   for (let i = 0; i < startDay; i++) {
     row.push(null)
   }
@@ -43,25 +41,18 @@ export function getCalendarDays(year, month) {
   for (let day = 1; day <= daysInMonth; day++) {
     const m = String(month).padStart(2, '0')
     const d = String(day).padStart(2, '0')
-    row.push({
-      date: `${year}-${m}-${d}`,
-      day
-    })
+    row.push({ date: `${year}-${m}-${d}`, day })
     if (row.length === 7) {
       grid.push(row)
       row = []
     }
   }
 
-  // Fill trailing empty cells
   if (row.length > 0) {
-    while (row.length < 7) {
-      row.push(null)
-    }
+    while (row.length < 7) row.push(null)
     grid.push(row)
   }
 
-  // Ensure 6 rows for consistent layout
   while (grid.length < 6) {
     grid.push(new Array(7).fill(null))
   }

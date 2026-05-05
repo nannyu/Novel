@@ -1,51 +1,46 @@
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap');
 
 :root {
-  /* 明亮白色基底 */
-  --bg-primary: #f8f6f3;
-  --bg-secondary: #ffffff;
-  --bg-tertiary: #f0eeeb;
-  --bg-elevated: #e8e6e3;
-  --bg-card: #ffffff;
+  --bg-primary: #f7f9ff;
+  --bg-secondary: rgba(255, 255, 255, 0.92);
+  --bg-tertiary: #eef2fb;
+  --bg-elevated: rgba(255, 255, 255, 0.78);
+  --bg-card: rgba(255, 255, 255, 0.88);
 
-  /* 文字 */
-  --text-primary: #1a1a2e;
-  --text-secondary: #5a5a72;
-  --text-muted: #9e9eb0;
+  --text-primary: #080a2a;
+  --text-secondary: #687193;
+  --text-muted: #9aa4c1;
   --text-inverse: #ffffff;
 
-  /* 活力橙金主色 */
-  --accent: #f0a030;
-  --accent-hover: #e09020;
-  --accent-glow: rgba(240, 160, 48, 0.2);
-  --accent-dim: rgba(240, 160, 48, 0.08);
+  --accent: #5d73ff;
+  --accent-hover: #4b61ec;
+  --accent-glow: rgba(93, 115, 255, 0.22);
+  --accent-dim: rgba(93, 115, 255, 0.1);
 
-  /* 功能色 */
-  --green: #22a060;
-  --green-light: rgba(34, 160, 96, 0.08);
-  --danger: #e04040;
-  --danger-light: rgba(224, 64, 64, 0.08);
+  --green: #28a463;
+  --green-light: rgba(40, 164, 99, 0.1);
+  --danger: #ef334c;
+  --danger-light: rgba(239, 51, 76, 0.09);
+  --warning: #ffb42e;
 
-  /* 分类色 */
-  --cat-takeout: #22a060;
-  --cat-dining: #4080c0;
-  --cat-grocery: #e0a020;
-  --cat-telecom: #8060c0;
-  --cat-credit: #e04040;
-  --cat-study: #20a0a0;
-  --cat-fun: #e07030;
+  --cat-takeout: #28a463;
+  --cat-dining: #5d73ff;
+  --cat-grocery: #ffb42e;
+  --cat-telecom: #7358d9;
+  --cat-credit: #ef334c;
+  --cat-study: #1aa5a5;
+  --cat-fun: #ff7b54;
 
-  /* 圆角 */
-  --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 18px;
-  --radius-xl: 24px;
+  --radius-sm: 12px;
+  --radius-md: 18px;
+  --radius-lg: 26px;
+  --radius-xl: 34px;
 
-  /* 阴影 */
-  --shadow-sm: 0 1px 4px rgba(26, 26, 46, 0.05);
-  --shadow-md: 0 4px 16px rgba(26, 26, 46, 0.07);
-  --shadow-lg: 0 8px 24px rgba(26, 26, 46, 0.1);
-  --shadow-float: 0 6px 20px rgba(240, 160, 48, 0.25);
+  --border-soft: 1px solid rgba(137, 151, 196, 0.12);
+  --shadow-sm: 0 8px 24px rgba(44, 61, 118, 0.07);
+  --shadow-md: 0 16px 38px rgba(44, 61, 118, 0.1);
+  --shadow-lg: 0 24px 56px rgba(44, 61, 118, 0.14);
+  --shadow-float: 0 16px 30px rgba(93, 115, 255, 0.34);
 }
 
 * {
@@ -55,15 +50,15 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-html {
+html,
+body {
   height: 100%;
 }
 
 body {
-  height: 100%;
-  background: var(--bg-primary);
+  background: #eef3ff;
   color: var(--text-primary);
-  font-family: 'Noto Sans SC', -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif;
+  font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   font-size: 14px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
@@ -75,10 +70,16 @@ body {
   height: 100%;
   position: relative;
   overflow: hidden;
-  background: var(--bg-primary);
+  background:
+    radial-gradient(circle at 8% 10%, rgba(159, 183, 255, 0.44), transparent 29%),
+    radial-gradient(circle at 100% 5%, rgba(255, 219, 142, 0.45), transparent 28%),
+    linear-gradient(180deg, #f9fbff 0%, #f5f7ff 45%, #ffffff 100%);
 }
 
-input, button, textarea, select {
+input,
+button,
+textarea,
+select {
   font-family: inherit;
   font-size: inherit;
   color: inherit;
@@ -100,12 +101,30 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   display: none;
 }
 
+.page-heading {
+  padding: 28px 24px 14px;
+}
+
+.page-title {
+  font-size: 24px;
+  line-height: 1.2;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.glass-card {
+  background: var(--bg-card);
+  border: var(--border-soft);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(18px);
+}
+
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.92); }
+  from { opacity: 0; transform: scale(0.94); }
   to { opacity: 1; transform: scale(1); }
 }

@@ -5,7 +5,6 @@ import { isToday } from '../utils/calendar.js'
 import { holidays, extraWorkdays } from '../data/holidays.js'
 
 const store = useExpenseStore()
-
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
 
 const grid = computed(() => {
@@ -61,7 +60,7 @@ function formatAmount(amount) {
 
 <template>
   <div class="calendar-wrapper">
-    <div class="calendar-grid">
+    <div class="calendar-grid glass-card">
       <div class="weekday-row">
         <span v-for="wd in WEEKDAYS" :key="wd" class="weekday">{{ wd }}</span>
       </div>
@@ -71,18 +70,12 @@ function formatAmount(amount) {
             v-for="(cell, ci) in row"
             :key="ci"
             class="day-cell"
-            :class="{
-              today: cell.currentMonth && isToday(cell.date),
-              'other-month': !cell.currentMonth,
-              'has-tag': cell.currentMonth && getCellTag(cell)
-            }"
+            :class="{ today: cell.currentMonth && isToday(cell.date), 'other-month': !cell.currentMonth }"
           >
             <span class="day-num">{{ cell.day }}</span>
-            <span v-if="cell.currentMonth && getCellTag(cell)" class="day-tag" :class="getCellTag(cell).type">
-              {{ getCellTag(cell).text }}
-            </span>
-            <span v-else-if="cell.currentMonth && store.dailyTotals[cell.date]" class="day-amount">
-              {{ formatAmount(store.dailyTotals[cell.date]) }}
+            <span v-if="cell.currentMonth && (getCellTag(cell) || store.dailyTotals[cell.date])" class="day-meta">
+              <span v-if="getCellTag(cell)" class="day-tag" :class="getCellTag(cell).type">{{ getCellTag(cell).text }}</span>
+              <span v-if="store.dailyTotals[cell.date]" class="day-amount">{{ formatAmount(store.dailyTotals[cell.date]) }}</span>
             </span>
           </div>
         </template>
@@ -93,31 +86,27 @@ function formatAmount(amount) {
 
 <style scoped>
 .calendar-wrapper {
-  padding: 0 16px;
-  margin-bottom: 4px;
+  padding: 0 22px 4px;
 }
 
 .calendar-grid {
-  background: var(--bg-card);
-  border-radius: var(--radius-lg);
-  padding: 12px 10px 8px;
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-xl);
+  padding: 16px 14px 12px;
 }
 
 .weekday-row {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   text-align: center;
-  padding-bottom: 6px;
-  border-bottom: 1px solid rgba(44, 24, 16, 0.05);
-  margin-bottom: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(137, 151, 196, 0.16);
+  margin-bottom: 6px;
 }
 
 .weekday {
-  font-size: 11px;
   color: var(--text-muted);
-  font-weight: 500;
-  letter-spacing: 1px;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .days-grid {
@@ -126,33 +115,18 @@ function formatAmount(amount) {
 }
 
 .day-cell {
-  aspect-ratio: 1 / 1.15;
+  aspect-ratio: 1 / 1.2;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0;
-  position: relative;
-  border-radius: var(--radius-sm);
+  gap: 3px;
+  border-radius: 14px;
 }
 
 .day-cell.today {
-  background: var(--accent);
-  border-radius: 50%;
-  width: 32px;
-  height: 32px;
-  margin: 2px auto;
-  aspect-ratio: auto;
-}
-
-.day-cell.today .day-num {
   color: #fff;
-  font-weight: 700;
-  font-size: 14px;
-}
-
-.day-cell.today .day-tag {
-  display: none;
+  background: linear-gradient(135deg, #7791ff, #4f5df6);
 }
 
 .day-cell.other-month .day-num {
@@ -161,17 +135,30 @@ function formatAmount(amount) {
 }
 
 .day-num {
-  font-size: 14px;
   color: var(--text-primary);
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 700;
   line-height: 1.2;
 }
 
-.day-tag {
-  font-size: 8px;
-  font-weight: 700;
+.today .day-num {
+  color: #fff;
+}
+
+.day-meta {
+  min-height: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+}
+
+.day-tag,
+.day-amount {
+  font-size: 9px;
+  font-weight: 800;
   line-height: 1;
-  margin-top: 1px;
 }
 
 .day-tag.holiday,
@@ -179,15 +166,23 @@ function formatAmount(amount) {
   color: var(--danger);
 }
 
+.today .day-tag {
+  color: #fff;
+}
+
 .day-tag.work {
   color: var(--text-muted);
 }
 
 .day-amount {
-  font-size: 9px;
   color: var(--green);
-  line-height: 1;
-  font-weight: 600;
-  margin-top: 1px;
+  max-width: 34px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.today .day-amount {
+  color: #fff;
 }
 </style>

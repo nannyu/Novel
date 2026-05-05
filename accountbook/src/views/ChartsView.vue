@@ -1,200 +1,274 @@
 <script setup>
-import { computed } from 'vue'
-import { Pie, Bar, Line } from 'vue-chartjs'
-import {
-  Chart as ChartJS, ArcElement, Tooltip, Legend,
-  CategoryScale, LinearScale, BarElement, PointElement, LineElement, Filler
-} from 'chart.js'
+import { ref, computed } from 'vue'
 import { useExpenseStore } from '../stores/expense.js'
-
-ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Filler)
+import { getCategoryMap } from '../data/categories.js'
 
 const store = useExpenseStore()
+const categoryMap = getCategoryMap()
+const rankType = ref('expense')
 
-const categoryMap = {
-  takeout: { name: '外卖', color: '#3d7a50' },
-  dining: { name: '堂食', color: '#4a6e8a' },
-  grocery: { name: '买菜', color: '#b89030' },
-  telecom: { name: '通讯', color: '#7a5a8a' },
-  credit: { name: '还信用卡', color: '#b53a2a' },
-  study: { name: '学习', color: '#2d7a6a' },
-  fun: { name: '娱乐', color: '#b06a30' },
-  badminton: { name: '羽毛球', color: '#2d8a5a' },
-  ai: { name: 'AI', color: '#4a6aaa' }
-}
-
-const categoryChartData = computed(() => {
-  const totals = {}
+const rankings = computed(() => {
+  const map = {}
   store.monthExpenses.forEach(e => {
-    totals[e.category] = (totals[e.category] || 0) + e.amount
-  })
-  const keys = Object.keys(totals)
-  return {
-    labels: keys.map(k => categoryMap[k]?.name || k),
-    datasets: [{
-      data: keys.map(k => totals[k]),
-      backgroundColor: keys.map(k => categoryMap[k]?.color || '#999'),
-      borderWidth: 0
-    }]
-  }
-})
-
-const categoryChartOptions = {
-  responsive: true,
-  maintainAspectRatio: true,
-  plugins: {
-    legend: {
-      position: 'right',
-      labels: { color: '#5c4030', padding: 10, font: { size: 11, family: 'Noto Sans SC' }, usePointStyle: true, pointStyleWidth: 8 }
+    if (!map[e.category]) {
+      map[e.category] = { category: e.category, expense: 0, saving: 0, count: 0 }
     }
-  }
-}
-
-const barChartData = computed(() => ({
-  labels: ['工作日', '休息日'],
-  datasets: [{
-    data: [store.workdayExpense, store.restdayExpense],
-    backgroundColor: ['#3d7a50', '#c9b896'],
-    borderRadius: 6,
-    barThickness: 36
-  }]
-}))
-
-const barChartOptions = {
-  responsive: true,
-  maintainAspectRatio: true,
-  plugins: { legend: { display: false } },
-  scales: {
-    x: { ticks: { color: '#5c4030', font: { size: 12 } }, grid: { display: false } },
-    y: { ticks: { color: '#9a8570', font: { size: 11 } }, grid: { color: 'rgba(44,24,16,0.06)' } }
-  }
-}
-
-const trendData = computed(() => {
-  const months = []
-  let y = store.currentYear, m = store.currentMonth
-  for (let i = 5; i >= 0; i--) {
-    months.push({ year: y, month: m })
-    m--
-    if (m < 1) { m = 12; y-- }
-  }
-  months.reverse()
-
-  return {
-    labels: months.map(i => `${i.month}月`),
-    datasets: [{
-      data: months.map(i => {
-        const prefix = `${i.year}-${String(i.month).padStart(2, '0')}`
-        return store.expenses.filter(e => e.date.startsWith(prefix)).reduce((s, e) => s + e.amount, 0)
-      }),
-      borderColor: '#d4a04a',
-      backgroundColor: 'rgba(212, 160, 74, 0.12)',
-      fill: true,
-      tension: 0.4,
-      pointBackgroundColor: '#d4a04a',
-      pointRadius: 4,
-      pointHoverRadius: 6,
-      borderWidth: 2
-    }]
-  }
+    map[e.category].expense += e.amount
+    map[e.category].saving += e.savingAmount || 0
+    map[e.category].count++
+  })
+  const list = Object.values(map)
+  const key = rankType.value === 'expense' ? 'expense' : 'saving'
+  return list
+    .filter(item => rankType.value === 'expense' ? item.expense > 0 : item.saving > 0)
+    .sort((a, b) => b[key] - a[key])
 })
 
-const trendOptions = {
-  responsive: true,
-  maintainAspectRatio: true,
-  plugins: { legend: { display: false } },
-  scales: {
-    x: { ticks: { color: '#5c4030', font: { size: 12 } }, grid: { display: false } },
-    y: { ticks: { color: '#9a8570', font: { size: 11 } }, grid: { color: 'rgba(44,24,16,0.06)' }, beginAtZero: true }
-  }
-}
+const maxAmount = computed(() => {
+  if (rankings.value.length === 0) return 1
+  const key = rankType.value === 'expense' ? 'expense' : 'saving'
+  return Math.max(...rankings.value.map(item => item[key]), 1)
+})
+
+const totalExpense = computed(() => store.monthExpenses.reduce((s, e) => s + e.amount, 0))
+const totalSaving = computed(() => store.monthExpenses.reduce((s, e) => s + (e.savingAmount || 0), 0))
 </script>
 
 <template>
   <div class="charts-view">
-    <h2 class="page-title">图表分析</h2>
+    <header class="page-heading">
+      <h2 class="page-title">图表</h2>
+    </header>
 
-    <div class="chart-card" v-if="store.monthExpenses.length > 0">
-      <h3>支出分类</h3>
-      <div class="chart-container">
-        <Pie :data="categoryChartData" :options="categoryChartOptions" />
+    <div class="toggle-row glass-card">
+      <button class="toggle-btn" :class="{ active: rankType === 'expense' }" @click="rankType = 'expense'">支出排行</button>
+      <button class="toggle-btn" :class="{ active: rankType === 'saving' }" @click="rankType = 'saving'">省钱排行</button>
+    </div>
+
+    <section class="summary-panel glass-card">
+      <span>{{ rankType === 'expense' ? '本月总支出' : '本月总省钱' }}</span>
+      <strong :class="{ green: rankType === 'saving' }">¥{{ (rankType === 'expense' ? totalExpense : totalSaving).toFixed(2) }}</strong>
+    </section>
+
+    <div v-if="rankings.length > 0" class="rank-list glass-card">
+      <div v-for="(item, index) in rankings" :key="item.category" class="rank-item" :style="{ animationDelay: index * 0.05 + 's' }">
+        <div class="rank-num" :class="{ top: index < 3 }">{{ index + 1 }}</div>
+        <div class="rank-icon" :style="{ background: categoryMap[item.category]?.bg || '#eef2fb', color: categoryMap[item.category]?.color || 'var(--accent)' }">
+          {{ categoryMap[item.category]?.icon || '¥' }}
+        </div>
+        <div class="rank-body">
+          <div class="rank-head">
+            <span class="rank-name">{{ categoryMap[item.category]?.name || item.category }}</span>
+            <span class="rank-amount">¥{{ (rankType === 'expense' ? item.expense : item.saving).toFixed(2) }}</span>
+          </div>
+          <div class="rank-bar-track">
+            <div class="rank-bar-fill" :class="rankType" :style="{ width: `${(rankType === 'expense' ? item.expense : item.saving) / maxAmount * 100}%` }"></div>
+          </div>
+          <div class="rank-meta">
+            <span>{{ item.count }}笔</span>
+            <span v-if="rankType === 'expense' && item.saving > 0" class="meta-saving">省 ¥{{ item.saving.toFixed(2) }}</span>
+            <span v-if="rankType === 'saving' && item.expense > 0" class="meta-expense">支出 ¥{{ item.expense.toFixed(2) }}</span>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="chart-card">
-      <h3>工作日 vs 休息日</h3>
-      <div class="chart-container">
-        <Bar :data="barChartData" :options="barChartOptions" />
-      </div>
-    </div>
-
-    <div class="chart-card">
-      <h3>近6个月趋势</h3>
-      <div class="chart-container">
-        <Line :data="trendData" :options="trendOptions" />
-      </div>
-    </div>
-
-    <div v-if="store.monthExpenses.length === 0" class="empty">
-      <div class="empty-icon">📊</div>
+    <div v-else class="empty glass-card">
+      <div class="empty-icon">⌁</div>
       <p class="empty-text">暂无数据</p>
-      <p class="empty-hint">添加记账记录后查看图表分析</p>
+      <p class="empty-hint">添加记账记录后查看排行</p>
     </div>
   </div>
 </template>
 
 <style scoped>
 .charts-view {
-  padding: 20px 16px;
+  min-height: 100%;
+  padding: 0 22px 24px;
 }
 
-.page-title {
-  font-family: 'Noto Serif SC', serif;
-  font-size: 22px;
-  font-weight: 700;
-  margin-bottom: 20px;
-  color: var(--text-primary);
+.page-heading {
+  padding-left: 2px;
+  padding-right: 2px;
 }
 
-.chart-card {
-  background: var(--bg-card);
-  border-radius: var(--radius-lg);
-  padding: 18px;
-  margin-bottom: 14px;
-  box-shadow: var(--shadow-md);
-  animation: fadeInUp 0.4s ease both;
+.toggle-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 20px;
+  margin-bottom: 16px;
 }
 
-.chart-card h3 {
+.toggle-btn {
+  padding: 11px 14px;
+  border-radius: 15px;
   font-size: 14px;
+  font-weight: 800;
   color: var(--text-secondary);
-  margin-bottom: 14px;
-  font-weight: 500;
+  transition: all 0.2s ease;
 }
 
-.chart-container {
-  max-height: 240px;
+.toggle-btn.active {
+  color: #fff;
+  background: linear-gradient(135deg, #7791ff, #4f5df6);
+  box-shadow: 0 10px 20px rgba(93, 115, 255, 0.24);
+}
+
+.summary-panel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 20px;
+  margin-bottom: 16px;
+  border-radius: var(--radius-lg);
+  animation: fadeInUp 0.3s ease both;
+}
+
+.summary-panel span {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.summary-panel strong {
+  color: var(--text-primary);
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.summary-panel strong.green {
+  color: var(--green);
+}
+
+.rank-list {
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+}
+
+.rank-item {
+  display: grid;
+  grid-template-columns: 30px 46px 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  animation: fadeInUp 0.35s ease both;
+}
+
+.rank-item + .rank-item {
+  border-top: 1px solid rgba(137, 151, 196, 0.16);
+}
+
+.rank-num {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  background: #eef2fb;
+  border-radius: 11px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.rank-num.top {
+  color: #fff;
+  background: linear-gradient(135deg, #7d92ff, #4f5df6);
+}
+
+.rank-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  font-size: 22px;
+}
+
+.rank-body {
+  min-width: 0;
+}
+
+.rank-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.rank-name {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.rank-amount {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.rank-bar-track {
+  height: 7px;
+  background: #eef2fb;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.rank-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.rank-bar-fill.expense {
+  background: var(--danger);
+}
+
+.rank-bar-fill.saving {
+  background: var(--green);
+}
+
+.rank-meta {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.meta-saving {
+  color: var(--green);
+}
+
+.meta-expense {
+  color: var(--danger);
 }
 
 .empty {
   text-align: center;
-  padding: 60px 0;
+  padding: 54px 20px;
+  border-radius: var(--radius-xl);
 }
 
 .empty-icon {
-  font-size: 40px;
-  margin-bottom: 12px;
-  opacity: 0.6;
+  color: var(--accent);
+  font-size: 38px;
+  margin-bottom: 10px;
 }
 
 .empty-text {
-  color: var(--text-secondary);
-  font-size: 15px;
-  margin-bottom: 4px;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 800;
 }
 
 .empty-hint {
-  font-size: 12px;
   color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
 }
 </style>

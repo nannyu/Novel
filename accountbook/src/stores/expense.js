@@ -18,6 +18,25 @@ export const useExpenseStore = defineStore('expense', () => {
     return monthExpenses.value.reduce((sum, e) => sum + e.amount, 0)
   })
 
+  const totalSaving = computed(() => {
+    return monthExpenses.value.reduce((sum, e) => sum + (e.savingAmount || 0), 0)
+  })
+
+  const previousMonthSaving = computed(() => {
+    let year = currentYear.value
+    let month = currentMonth.value - 1
+    if (month < 1) {
+      month = 12
+      year--
+    }
+    const prefix = `${year}-${String(month).padStart(2, '0')}`
+    return expenses.value
+      .filter(e => e.date.startsWith(prefix))
+      .reduce((sum, e) => sum + (e.savingAmount || 0), 0)
+  })
+
+  const savingDiff = computed(() => totalSaving.value - previousMonthSaving.value)
+
   const workdayExpense = computed(() => {
     return monthExpenses.value
       .filter(e => isWorkday(e.date))
@@ -64,6 +83,18 @@ export const useExpenseStore = defineStore('expense', () => {
         date,
         items: groups[date].sort((a, b) => b.createdAt - a.createdAt)
       }))
+  })
+
+  const categoryStats = computed(() => {
+    const map = {}
+    monthExpenses.value.forEach(e => {
+      if (!map[e.category]) {
+        map[e.category] = { category: e.category, expense: 0, saving: 0 }
+      }
+      map[e.category].expense += e.amount
+      map[e.category].saving += e.savingAmount || 0
+    })
+    return Object.values(map).sort((a, b) => (b.expense + b.saving) - (a.expense + a.saving))
   })
 
   async function loadExpenses() {
@@ -114,8 +145,9 @@ export const useExpenseStore = defineStore('expense', () => {
 
   return {
     expenses, currentYear, currentMonth, viewMode,
-    monthExpenses, totalExpense, workdayExpense, restdayExpense,
-    creditTotal, cashTotal, dailyTotals, expensesByDate,
+    monthExpenses, totalExpense, totalSaving, previousMonthSaving, savingDiff,
+    workdayExpense, restdayExpense, creditTotal, cashTotal, dailyTotals,
+    expensesByDate, categoryStats,
     loadExpenses, addExpense, updateExpense, deleteExpense,
     setMonth, prevMonth, nextMonth
   }
