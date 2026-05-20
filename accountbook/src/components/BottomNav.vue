@@ -9,8 +9,8 @@ const router = useRouter()
   <nav class="bottom-nav">
     <router-link to="/" class="nav-item" :class="{ active: route.path === '/' }" aria-label="记账">
       <svg class="nav-svg home-icon" viewBox="0 0 24 24" fill="none">
-        <path d="M4.2 11.1L12 4.4l7.8 6.7v7.1a2 2 0 01-2 2H6.2a2 2 0 01-2-2v-7.1Z" fill="currentColor"/>
-        <rect x="9" y="14.1" width="6" height="3.2" rx="1.35" fill="white"/>
+        <path d="M5 7.5h12.5a2.5 2.5 0 012.5 2.5v6.5a2.5 2.5 0 01-2.5 2.5H5.7A3.7 3.7 0 012 15.3V10.5a3 3 0 013-3Z" fill="currentColor"/>
+        <rect x="14.5" y="11.4" width="4.2" height="3.8" rx="1.9" fill="white"/>
       </svg>
       <span class="nav-label">记账</span>
     </router-link>
@@ -60,7 +60,7 @@ const router = useRouter()
   align-items: center;
   min-height: 68px;
   padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.94);
   border: var(--border-soft);
   border-radius: 25px;
   box-shadow: var(--shadow-lg);

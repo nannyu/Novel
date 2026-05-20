@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useExpenseStore } from '../stores/expense.js'
 import AmountKeypad from './AmountKeypad.vue'
 import { getAllCategories, addCustomCategory } from '../data/categories.js'
+import { getLocalDateString } from '../utils/calendar.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -23,6 +24,8 @@ const savingStep = ref('expected')
 const showSheet = ref(false)
 const showAddCategory = ref(false)
 const newCategoryName = ref('')
+const formError = ref('')
+const isSubmitting = ref(false)
 
 const savingReasons = [
   { key: 'coupon', name: '用了优惠券' },
@@ -48,12 +51,14 @@ if (isEdit.value) {
 function selectCategory(cat) {
   selectedCategory.value = cat
   savingStep.value = 'expected'
+  formError.value = ''
   showSheet.value = true
 }
 
 function setEntryMode(mode) {
   entryMode.value = mode
   savingStep.value = 'expected'
+  formError.value = ''
 }
 
 function setPaymentMethod(method) {
@@ -63,6 +68,7 @@ function setPaymentMethod(method) {
 
 function closeSheet() {
   showSheet.value = false
+  formError.value = ''
   if (!isEdit.value) {
     selectedCategory.value = ''
     amount.value = ''
@@ -90,20 +96,40 @@ function confirmAddCategory() {
 
 function nextSavingStep() {
   const expected = parseFloat(expectedAmount.value)
-  if (Number.isNaN(expected) || expected <= 0) return
+  if (Number.isNaN(expected) || expected <= 0) {
+    formError.value = '请先输入大于 0 的应花金额'
+    return
+  }
+  formError.value = ''
   savingStep.value = 'actual'
 }
 
 async function save() {
+  if (isSubmitting.value) return
   const num = parseFloat(amount.value)
   const expected = parseFloat(expectedAmount.value)
   const isSaving = entryMode.value === 'saving'
-  if (!selectedCategory.value || Number.isNaN(num) || num < 0) return
-  if (!isSaving && num <= 0) return
-  if (isSaving && (Number.isNaN(expected) || expected <= num)) return
+  formError.value = ''
+  if (!selectedCategory.value || Number.isNaN(num) || num < 0) {
+    formError.value = '请先选择类型并输入金额'
+    return
+  }
+  if (!isSaving && num <= 0) {
+    formError.value = '支出金额需要大于 0'
+    return
+  }
+  if (isSaving && Number.isNaN(expected)) {
+    formError.value = '请先输入应花金额'
+    return
+  }
+  if (isSaving && expected <= num) {
+    formError.value = `实际花了 ¥${num.toFixed(2)}，没有低于应花 ¥${expected.toFixed(2)}，不能记录为省钱支出`
+    return
+  }
+  isSubmitting.value = true
   localStorage.setItem('lastPaymentMethod', paymentMethod.value)
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = getLocalDateString()
   const data = {
     category: selectedCategory.value,
     amount: num,
@@ -115,18 +141,32 @@ async function save() {
     note: ''
   }
 
-  if (isEdit.value) {
-    await store.updateExpense(editId.value, data)
-  } else {
-    await store.addExpense(data)
+  try {
+    if (isEdit.value) {
+      await store.updateExpense(editId.value, data)
+    } else {
+      await store.addExpense(data)
+    }
+    router.back()
+  } catch (error) {
+    console.error('Save expense failed:', error)
+    formError.value = '保存失败，请稍后再试'
+    isSubmitting.value = false
   }
-  router.back()
 }
 
 async function remove() {
+  if (isSubmitting.value) return
   if (confirm('确定删除这条记录吗？')) {
-    await store.deleteExpense(editId.value)
-    router.back()
+    isSubmitting.value = true
+    try {
+      await store.deleteExpense(editId.value)
+      router.back()
+    } catch (error) {
+      console.error('Delete expense failed:', error)
+      formError.value = '删除失败，请稍后再试'
+      isSubmitting.value = false
+    }
   }
 }
 </script>
@@ -135,12 +175,12 @@ async function remove() {
   <div class="expense-form">
     <div class="form-header">
       <button class="back-btn" aria-label="返回" @click="router.back()">
-        <svg width="22" height="22" viewBox="0 0 20 20" fill="none">
-          <path d="M12 4L6 10L12 16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <svg width="30" height="30" viewBox="0 0 20 20" fill="none">
+          <path d="M12 4L6 10L12 16" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </button>
       <h2>{{ isEdit ? '编辑记录' : '记一笔' }}</h2>
-      <button v-if="isEdit" class="delete-btn" @click="remove">删除</button>
+      <button v-if="isEdit" class="delete-btn" :disabled="isSubmitting" @click="remove">删除</button>
       <span v-else class="header-spacer"></span>
     </div>
 
@@ -151,7 +191,12 @@ async function remove() {
 
     <div class="category-grid">
       <button v-for="cat in categories" :key="cat.key" class="cat-item glass-card" :class="{ selected: selectedCategory === cat.key }" @click="selectCategory(cat.key)">
-        <span class="cat-icon" :style="{ background: cat.bg, color: cat.color }">{{ cat.icon }}</span>
+        <span class="cat-icon" :style="{ background: cat.bg, color: cat.color }">
+          <span v-if="cat.iconType === 'telecom'" class="telecom-glyph" aria-hidden="true">
+            <span v-for="n in 9" :key="n"></span>
+          </span>
+          <template v-else>{{ cat.icon }}</template>
+        </span>
         <span class="cat-name">{{ cat.name }}</span>
       </button>
       <button class="cat-item add-cat" @click="openAddCategory">
@@ -209,13 +254,14 @@ async function remove() {
           </div>
 
           <div v-if="entryMode === 'saving'" class="actual-label">{{ savingStep === 'expected' ? '应花多少' : '实际花了' }}</div>
+          <p v-if="formError" class="form-error">{{ formError }}</p>
 
           <AmountKeypad v-if="entryMode === 'saving' && savingStep === 'expected'" v-model="expectedAmount" />
           <AmountKeypad v-else v-model="amount" />
 
           <div class="sheet-footer">
             <button v-if="entryMode === 'saving' && savingStep === 'expected'" class="save-btn" @click="nextSavingStep">下一步：实际花了</button>
-            <button v-else class="save-btn" @click="save">保存</button>
+            <button v-else class="save-btn" :disabled="isSubmitting" @click="save">{{ isSubmitting ? '保存中...' : '保存' }}</button>
           </div>
         </div>
       </div>
@@ -230,6 +276,7 @@ async function remove() {
   background:
     radial-gradient(circle at 8% 10%, rgba(159, 183, 255, 0.42), transparent 29%),
     radial-gradient(circle at 100% 5%, rgba(255, 219, 142, 0.42), transparent 28%),
+    radial-gradient(circle at 45% 45%, rgba(187, 207, 255, 0.34), transparent 30%),
     linear-gradient(180deg, #f9fbff 0%, #f5f7ff 45%, #ffffff 100%);
 }
 
@@ -237,12 +284,12 @@ async function remove() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 22px 22px 10px;
+  padding: 23px 22px 15px;
 }
 
 .form-header h2 {
   color: var(--text-primary);
-  font-size: 22px;
+  font-size: 25px;
   font-weight: 800;
 }
 
@@ -255,9 +302,9 @@ async function remove() {
 .back-btn {
   display: grid;
   place-items: center;
-  border-radius: 17px;
+  border-radius: 18px;
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.88);
   box-shadow: var(--shadow-sm);
 }
 
@@ -270,48 +317,58 @@ async function remove() {
   background: var(--danger-light);
 }
 
+.delete-btn:disabled,
+.save-btn:disabled {
+  cursor: default;
+  opacity: 0.72;
+  transform: none;
+}
+
 .type-toggle {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
-  margin: 16px 22px 14px;
-  padding: 6px;
-  border-radius: 20px;
+  height: 56px;
+  margin: 19px 22px 29px;
+  padding: 5px;
+  border-radius: 27px;
 }
 
 .type-btn {
-  padding: 11px 18px;
-  border-radius: 15px;
+  border-radius: 22px;
   color: var(--text-secondary);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 800;
 }
 
 .type-btn.active {
   color: #fff;
-  background: linear-gradient(135deg, #7791ff, #4f5df6);
-  box-shadow: 0 10px 20px rgba(93, 115, 255, 0.24);
+  background: linear-gradient(135deg, #747cf0, #676deb);
+  box-shadow: 0 10px 20px rgba(93, 115, 255, 0.22);
 }
 
 .category-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
-  padding: 8px 22px;
+  padding: 0 22px;
 }
 
 .cat-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  gap: 13px;
   min-width: 0;
-  padding: 14px 4px 12px;
+  min-height: 96px;
+  padding: 12px 4px 10px;
   border-radius: 20px;
-  transition: transform 0.16s ease, box-shadow 0.16s ease;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
 }
 
 .cat-item.selected {
+  border-color: rgba(93, 115, 255, 0.5);
   box-shadow: 0 0 0 2px var(--accent), var(--shadow-md);
 }
 
@@ -328,11 +385,42 @@ async function remove() {
   font-size: 23px;
 }
 
+.telecom-glyph {
+  width: 28px;
+  height: 38px;
+  display: grid;
+  grid-template-columns: repeat(3, 5px);
+  grid-auto-rows: 5px;
+  gap: 4px;
+  justify-content: center;
+  align-content: center;
+  border-radius: 4px;
+  background: #5141bf;
+  box-shadow: 0 -4px 0 rgba(255, 255, 255, 0.16) inset;
+}
+
+.telecom-glyph span {
+  border-radius: 1px;
+}
+
+.telecom-glyph span:nth-child(3n + 1) {
+  background: #ffb02e;
+}
+
+.telecom-glyph span:nth-child(3n + 2) {
+  background: #ff674b;
+}
+
+.telecom-glyph span:nth-child(3n) {
+  background: #ffe66a;
+}
+
 .cat-name {
   max-width: 100%;
-  color: var(--text-secondary);
-  font-size: 12px;
+  color: #666e8e;
+  font-size: 14px;
   font-weight: 800;
+  line-height: 1.1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -343,13 +431,14 @@ async function remove() {
 }
 
 .cat-item.add-cat {
-  border: 1px dashed rgba(137, 151, 196, 0.35);
-  background: rgba(255, 255, 255, 0.45);
+  border: 1px dashed rgba(137, 151, 196, 0.45);
+  background: rgba(255, 255, 255, 0.38);
+  box-shadow: none;
 }
 
 .cat-item.add-cat .cat-icon {
-  color: var(--text-muted);
-  background: #eef2fb;
+  color: #9aa5c2;
+  background: linear-gradient(135deg, #eef2fa, #f8faff);
 }
 
 .sheet-overlay {
@@ -494,6 +583,17 @@ async function remove() {
   margin: 4px 0 0;
 }
 
+.form-error {
+  margin: 8px 20px 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  color: var(--danger);
+  background: var(--danger-light);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
 .reason-row {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -531,6 +631,10 @@ async function remove() {
   transform: scale(0.98);
 }
 
+.save-btn:disabled:active {
+  transform: none;
+}
+
 .sheet-enter-active,
 .sheet-leave-active {
   transition: opacity 0.22s ease;
@@ -549,5 +653,20 @@ async function remove() {
 .sheet-enter-from .sheet,
 .sheet-leave-to .sheet {
   transform: translateY(100%);
+}
+
+@media (max-width: 360px) {
+  .category-grid {
+    gap: 10px;
+    padding: 0 18px;
+  }
+
+  .cat-item {
+    min-height: 90px;
+  }
+
+  .cat-name {
+    font-size: 12px;
+  }
 }
 </style>

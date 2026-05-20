@@ -3,6 +3,7 @@ import { onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useExpenseStore } from './stores/expense.js'
 import BottomNav from './components/BottomNav.vue'
+import { getUserId } from './services/userIdentity.js'
 
 const route = useRoute()
 const store = useExpenseStore()
@@ -10,6 +11,7 @@ const store = useExpenseStore()
 const isFormPage = computed(() => ['add', 'edit'].includes(route.name))
 
 onMounted(() => {
+  getUserId()
   store.loadExpenses()
 })
 </script>

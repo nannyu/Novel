@@ -1,31 +1,85 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useExpenseStore } from '../stores/expense.js'
 import db from '../db/index.js'
+import { getUserProfile } from '../services/userIdentity.js'
+import {
+  deleteAllCloudExpenses,
+  getStorageMode,
+  isCloudConfigured,
+  isCloudStorageEnabled,
+  setStorageMode,
+  syncUserProfileToCloud
+} from '../services/cloudSync.js'
 
 const store = useExpenseStore()
-const storageSize = ref('计算中...')
-const totalRecords = ref(0)
+const userProfile = ref(getUserProfile())
+const storageMode = ref(getStorageMode())
+const isSyncing = ref(false)
+const syncStatus = ref('')
 
-async function calcStorageSize() {
-  try {
-    const data = await db.expenses.toArray()
-    totalRecords.value = data.length
-    const json = JSON.stringify(data)
-    const bytes = new Blob([json]).size
-    if (bytes < 1024) {
-      storageSize.value = bytes + ' B'
-    } else if (bytes < 1024 * 1024) {
-      storageSize.value = (bytes / 1024).toFixed(1) + ' KB'
-    } else {
-      storageSize.value = (bytes / (1024 * 1024)).toFixed(2) + ' MB'
-    }
-  } catch {
-    storageSize.value = '计算失败'
+const isDebug = import.meta.env.DEV
+const totalRecords = computed(() => store.expenses.length)
+const totalDays = computed(() => new Set(store.expenses.map(item => item.date)).size)
+const displayName = computed(() => userProfile.value.displayName || 'momo')
+const visibleSyncStatus = computed(() => {
+  if (store.cloudSyncError) return store.cloudSyncError
+  if (!syncStatus.value) return ''
+  if (isDebug) return syncStatus.value
+  if (syncStatus.value.includes('云端存储')) return '已开启云端存储'
+  return syncStatus.value
+})
+const cloudReady = computed(() => isCloudConfigured())
+const storageHint = computed(() => {
+  if (storageMode.value === 'cloud') {
+    return '当前已开启云端备份，本地新增、编辑、删除的记账数据会同步到 Supabase。'
   }
-}
+  return '数据默认保存在浏览器本地 IndexedDB。清除浏览器数据可能导致丢失，建议开启云端存储。'
+})
 
-onMounted(calcStorageSize)
+onMounted(async () => {
+  if (isCloudStorageEnabled()) {
+    try {
+      userProfile.value = await syncUserProfileToCloud(userProfile.value)
+    } catch (error) {
+      syncStatus.value = error.message || '用户资料同步失败'
+    }
+  }
+})
+
+async function switchStorageMode(mode) {
+  if (storageMode.value === mode || isSyncing.value) return
+
+  if (mode === 'cloud') {
+    if (!cloudReady.value) {
+      alert('请先配置 Supabase 环境变量，再开启云端存储。')
+      return
+    }
+
+    isSyncing.value = true
+    syncStatus.value = '正在把本地数据同步到云端...'
+    try {
+      setStorageMode('cloud')
+      storageMode.value = 'cloud'
+      userProfile.value = await syncUserProfileToCloud(userProfile.value)
+      const count = await store.syncLocalExpensesToCloud()
+      await store.loadExpenses()
+      syncStatus.value = isDebug ? `已开启云端存储，已同步 ${count} 条本地记录` : '已开启云端存储'
+    } catch (error) {
+      setStorageMode('local')
+      storageMode.value = 'local'
+      syncStatus.value = error.message || '云端同步失败'
+      alert(syncStatus.value)
+    } finally {
+      isSyncing.value = false
+    }
+    return
+  }
+
+  setStorageMode('local')
+  storageMode.value = 'local'
+  syncStatus.value = '已切换为本地存储'
+}
 
 async function exportData() {
   try {
@@ -48,8 +102,8 @@ async function importData() {
   const input = document.createElement('input')
   input.type = 'file'
   input.accept = '.json'
-  input.onchange = async (e) => {
-    const file = e.target.files[0]
+  input.onchange = async (event) => {
+    const file = event.target.files[0]
     if (!file) return
     try {
       const text = await file.text()
@@ -60,7 +114,7 @@ async function importData() {
       }
 
       const existing = await db.expenses.toArray()
-      const existingIds = new Set(existing.map(e => e.id))
+      const existingIds = new Set(existing.map(item => item.id))
       const duplicates = imported.filter(item => existingIds.has(item.id))
 
       const confirmed = duplicates.length > 0
@@ -70,7 +124,10 @@ async function importData() {
 
       await db.expenses.bulkPut(imported)
       await store.loadExpenses()
-      await calcStorageSize()
+      if (isCloudStorageEnabled()) {
+        await store.syncLocalExpensesToCloud()
+        syncStatus.value = isDebug ? '导入数据已同步到云端' : '已开启云端存储'
+      }
       alert(`成功导入 ${imported.length} 条记录`)
     } catch {
       alert('导入失败，请检查文件格式')
@@ -83,7 +140,15 @@ async function clearAll() {
   if (confirm('确定要清除所有记账数据吗？\n\n清除后无法恢复，建议先导出备份。')) {
     await db.expenses.clear()
     store.expenses = []
-    await calcStorageSize()
+    if (isCloudStorageEnabled()) {
+      try {
+        await deleteAllCloudExpenses()
+        syncStatus.value = '本地和云端数据已清除'
+      } catch (error) {
+        syncStatus.value = error.message || '云端数据清除失败'
+        alert(syncStatus.value)
+      }
+    }
     alert('数据已清除')
   }
 }
@@ -95,18 +160,43 @@ async function clearAll() {
       <h2 class="page-title">我的</h2>
     </header>
 
+    <section class="profile-card glass-card">
+      <div class="profile-top">
+        <div class="avatar" aria-hidden="true">
+          <span>m</span>
+        </div>
+        <div class="profile-name">{{ displayName }}</div>
+      </div>
+      <div class="profile-stats">
+        <div class="stat-item">
+          <span class="stat-value">{{ totalDays }}</span>
+          <span class="stat-label">记账总天数</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value">{{ totalRecords }}</span>
+          <span class="stat-label">记账总笔数</span>
+        </div>
+      </div>
+    </section>
+
     <section class="section">
-      <div class="section-title">数据存储</div>
-      <div class="storage-card glass-card">
-        <div class="storage-row">
-          <span class="storage-label">存储大小</span>
-          <span class="storage-value">{{ storageSize }}</span>
+      <div class="section-title">数据存储方式</div>
+      <div class="storage-mode-card glass-card">
+        <div class="mode-toggle">
+          <button class="mode-btn" :class="{ active: storageMode === 'local' }" @click="switchStorageMode('local')">
+            本地存储
+          </button>
+          <button class="mode-btn" :class="{ active: storageMode === 'cloud' }" :disabled="isSyncing" @click="switchStorageMode('cloud')">
+            云端存储
+          </button>
         </div>
-        <div class="storage-row">
-          <span class="storage-label">记录条数</span>
-          <span class="storage-value">{{ totalRecords }} 条</span>
+        <div v-if="isDebug" class="cloud-state" :class="{ ready: cloudReady }">
+          {{ cloudReady ? 'Supabase 已配置' : 'Supabase 未配置，需填写环境变量后才能开启云端存储' }}
         </div>
-        <div class="storage-hint">数据保存在浏览器本地 IndexedDB 中。清除浏览器数据会导致丢失，建议定期导出备份。</div>
+        <div class="storage-hint">{{ storageHint }}</div>
+        <div v-if="visibleSyncStatus" class="sync-status">
+          {{ visibleSyncStatus }}
+        </div>
       </div>
     </section>
 
@@ -115,7 +205,7 @@ async function clearAll() {
       <div class="action-card glass-card">
         <button class="action-btn" @click="exportData">
           <div class="action-left">
-            <span class="action-icon export-icon">⇩</span>
+            <span class="action-icon export-icon">出</span>
             <div>
               <span class="action-name">数据导出</span>
               <span class="action-desc">导出所有记账数据到本地文件</span>
@@ -127,7 +217,7 @@ async function clearAll() {
         </button>
         <button class="action-btn" @click="importData">
           <div class="action-left">
-            <span class="action-icon import-icon">⇧</span>
+            <span class="action-icon import-icon">入</span>
             <div>
               <span class="action-name">数据导入</span>
               <span class="action-desc">从备份文件恢复记账数据</span>
@@ -162,6 +252,85 @@ async function clearAll() {
   padding-right: 2px;
 }
 
+.profile-card {
+  margin-bottom: 20px;
+  padding: 15px 18px 16px;
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(circle at 8% 0%, rgba(119, 145, 255, 0.2), transparent 32%),
+    radial-gradient(circle at 100% 0%, rgba(40, 164, 99, 0.12), transparent 30%),
+    var(--bg-card);
+  box-shadow: var(--shadow-md);
+  animation: fadeInUp 0.4s ease both;
+}
+
+.profile-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.avatar {
+  width: 60px;
+  height: 60px;
+  display: grid;
+  place-items: center;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  color: #fff;
+  background:
+    radial-gradient(circle at 32% 28%, #b8c4ff 0 12%, transparent 13%),
+    radial-gradient(circle at 66% 38%, #ffffff 0 8%, transparent 9%),
+    linear-gradient(135deg, #6879ff, #40b98f);
+  box-shadow: 0 12px 24px rgba(87, 102, 194, 0.22);
+}
+
+.avatar span {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #5462da;
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.profile-name {
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.profile-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.stat-item {
+  min-width: 0;
+  text-align: center;
+}
+
+.stat-value {
+  display: block;
+  color: var(--text-primary);
+  font-size: 24px;
+  line-height: 1.05;
+  font-weight: 900;
+}
+
+.stat-label {
+  display: block;
+  margin-top: 3px;
+  color: rgba(8, 10, 42, 0.58);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .section {
   margin-bottom: 20px;
   animation: fadeInUp 0.4s ease both;
@@ -183,42 +352,63 @@ async function clearAll() {
   padding-left: 2px;
 }
 
-.storage-card {
+.storage-mode-card {
   padding: 18px 20px;
   border-radius: var(--radius-xl);
 }
 
-.storage-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 11px 0;
+.mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  padding: 5px;
+  border-radius: 21px;
+  background: #eef2fb;
 }
 
-.storage-row + .storage-row {
-  border-top: 1px solid rgba(137, 151, 196, 0.16);
-}
-
-.storage-label {
+.mode-btn {
+  min-height: 42px;
+  border-radius: 17px;
   color: var(--text-secondary);
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.storage-value {
-  color: var(--text-primary);
-  font-size: 18px;
   font-weight: 800;
 }
 
-.storage-hint {
+.mode-btn.active {
+  color: #fff;
+  background: linear-gradient(135deg, #7791ff, #4f5df6);
+  box-shadow: 0 10px 20px rgba(93, 115, 255, 0.2);
+}
+
+.mode-btn:disabled {
+  opacity: 0.65;
+}
+
+.cloud-state {
   margin-top: 12px;
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.cloud-state.ready {
+  color: var(--green);
+}
+
+.storage-hint,
+.sync-status {
+  margin-top: 10px;
   padding: 12px 14px;
   border-radius: 16px;
   color: var(--text-secondary);
   background: rgba(238, 242, 251, 0.72);
   font-size: 13px;
   font-weight: 600;
+}
+
+.sync-status {
+  color: var(--accent);
+  background: var(--accent-dim);
+  font-weight: 800;
 }
 
 .action-card {
@@ -255,7 +445,7 @@ async function clearAll() {
   display: grid;
   place-items: center;
   border-radius: 16px;
-  font-size: 24px;
+  font-size: 16px;
   font-weight: 800;
 }
 
@@ -300,5 +490,25 @@ async function clearAll() {
   color: var(--danger);
   font-size: 15px;
   font-weight: 800;
+}
+
+@media (max-width: 360px) {
+  .profile-view {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .profile-card {
+    padding: 14px 16px 15px;
+  }
+
+  .avatar {
+    width: 56px;
+    height: 56px;
+  }
+
+  .profile-name {
+    font-size: 21px;
+  }
 }
 </style>

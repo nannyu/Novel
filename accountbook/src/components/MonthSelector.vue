@@ -12,7 +12,8 @@ const store = useExpenseStore()
       </svg>
     </button>
     <div class="month-display">
-      <span class="year">{{ store.currentYear }}年
+      <span class="year">
+        {{ store.currentYear }}年
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
           <path d="M4 6L8 10L12 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
@@ -29,47 +30,46 @@ const store = useExpenseStore()
 
 <style scoped>
 .month-selector {
-  display: grid;
-  grid-template-columns: 54px 128px 54px;
-  align-items: center;
-  justify-content: center;
-  gap: 46px;
+  position: relative;
   width: 100%;
-  transform: translateX(-18px);
+  height: 88px;
 }
 
 .month-display {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 128px;
+  min-width: 132px;
 }
 
 .year {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 14px;
+  gap: 4px;
+  font-size: 13px;
   color: var(--text-primary);
-  font-weight: 700;
-}
-
-.year svg {
-  color: var(--text-primary);
+  font-weight: 800;
+  line-height: 1;
 }
 
 .month {
-  font-size: 43px;
-  font-weight: 800;
+  margin-top: 7px;
   color: var(--text-primary);
-  line-height: 1.05;
-  margin-top: 4px;
+  font-size: 42px;
+  font-weight: 800;
+  line-height: 1;
   letter-spacing: 0;
 }
 
 .arrow {
-  width: 54px;
-  height: 54px;
+  position: absolute;
+  top: 32px;
+  width: 42px;
+  height: 42px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -80,8 +80,49 @@ const store = useExpenseStore()
   transition: transform 0.18s ease, background 0.18s ease;
 }
 
+.arrow:first-child {
+  left: 30px;
+}
+
 .arrow:active {
   transform: scale(0.94);
   background: #fff;
+}
+
+.arrow:last-child {
+  right: 62px;
+}
+
+@media (max-width: 430px) {
+  .month-selector {
+    height: 88px;
+  }
+
+  .arrow:first-child {
+    left: 28px;
+  }
+
+  .arrow:last-child {
+    right: 58px;
+  }
+}
+
+@media (max-width: 380px) {
+  .month {
+    font-size: 38px;
+  }
+
+  .arrow {
+    width: 40px;
+    height: 40px;
+  }
+
+  .arrow:first-child {
+    left: 22px;
+  }
+
+  .arrow:last-child {
+    right: 54px;
+  }
 }
 </style>

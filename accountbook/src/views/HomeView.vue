@@ -41,20 +41,20 @@ const showCalendar = ref(false)
 }
 
 .home-hero {
-  padding: 38px 22px 8px;
+  padding: 22px 22px 0;
 }
 
 .top-bar {
   position: relative;
-  min-height: 116px;
+  min-height: 94px;
 }
 
 .view-toggle {
   position: absolute;
   right: 0;
-  top: 10px;
-  width: 58px;
-  height: 58px;
+  top: 34px;
+  width: 50px;
+  height: 50px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -63,6 +63,30 @@ const showCalendar = ref(false)
   color: var(--text-primary);
   box-shadow: var(--shadow-sm);
   transition: transform 0.18s ease, background 0.18s ease;
+}
+
+@media (max-width: 430px) {
+  .home-hero {
+    padding-top: 20px;
+  }
+
+  .top-bar {
+    min-height: 90px;
+  }
+
+  .view-toggle {
+    top: 32px;
+    width: 50px;
+    height: 50px;
+    border-radius: 18px;
+  }
+}
+
+@media (max-width: 380px) {
+  .home-hero {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
 }
 
 .view-toggle:active {

@@ -1,7 +1,7 @@
 <script setup>
 import { useRouter } from 'vue-router'
 import { useExpenseStore } from '../stores/expense.js'
-import { formatDateChinese } from '../utils/calendar.js'
+import { formatDateChinese, formatTime } from '../utils/calendar.js'
 import { getCategoryMap, savingReasonMap } from '../data/categories.js'
 
 const categoryMap = getCategoryMap()
@@ -11,6 +11,10 @@ const store = useExpenseStore()
 const paymentLabel = {
   credit: '信用卡',
   cash: '现金'
+}
+
+function formatExpenseTime(item) {
+  return formatTime(item.createdAt)
 }
 
 let longPressTimer = null
@@ -82,11 +86,15 @@ function handleItemClick(id) {
           @pointercancel="clearLongPress"
         >
           <div class="item-icon" :style="{ background: categoryMap[item.category]?.bg || '#eef2fb', color: categoryMap[item.category]?.color || 'var(--accent)' }">
-            {{ categoryMap[item.category]?.icon || '¥' }}
+            <span v-if="categoryMap[item.category]?.iconType === 'telecom'" class="telecom-glyph" aria-hidden="true">
+              <span v-for="n in 9" :key="n"></span>
+            </span>
+            <template v-else>{{ categoryMap[item.category]?.icon || '¥' }}</template>
           </div>
           <div class="item-info">
             <span class="item-name">{{ categoryMap[item.category]?.name || item.category }}</span>
             <span class="item-meta">
+              <template v-if="formatExpenseTime(item)">{{ formatExpenseTime(item) }} · </template>
               {{ paymentLabel[item.paymentMethod] || '' }}
               <template v-if="item.savingAmount"> · 省 {{ item.savingAmount.toFixed(2) }} · {{ savingReasonMap[item.savingReason] || '省钱' }}</template>
               <template v-if="item.note"> · {{ item.note }}</template>
@@ -241,11 +249,93 @@ function handleItemClick(id) {
   color: #b3bdd7;
 }
 
+.telecom-glyph {
+  width: 25px;
+  height: 31px;
+  display: grid;
+  grid-template-columns: repeat(3, 4px);
+  grid-auto-rows: 4px;
+  gap: 3px;
+  justify-content: center;
+  align-content: center;
+  border-radius: 4px;
+  background: #5940cf;
+  box-shadow: 0 -3px 0 rgba(255, 255, 255, 0.18) inset;
+}
+
+.telecom-glyph span {
+  border-radius: 1px;
+}
+
+.telecom-glyph span:nth-child(3n + 1) {
+  background: #ffb02e;
+}
+
+.telecom-glyph span:nth-child(3n + 2) {
+  background: #ff674b;
+}
+
+.telecom-glyph span:nth-child(3n) {
+  background: #ffe66a;
+}
+
 .end-text {
   margin: 28px 0 12px;
   color: #9aa4c1;
   text-align: center;
   font-size: 14px;
   font-weight: 700;
+}
+
+@media (max-width: 430px) {
+  .expense-list {
+    padding: 0 22px;
+  }
+
+  .expense-item {
+    grid-template-columns: 48px minmax(0, 1fr) auto 16px;
+    gap: 10px;
+    padding: 16px 14px;
+  }
+
+  .item-icon {
+    width: 48px;
+    height: 48px;
+  }
+
+  .item-meta {
+    display: -webkit-box;
+    overflow: hidden;
+    line-height: 1.25;
+    white-space: normal;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .item-amount {
+    justify-self: end;
+    font-size: 19px;
+  }
+
+  .chevron {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+@media (max-width: 360px) {
+  .expense-item {
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+  }
+
+  .item-icon {
+    width: 44px;
+    height: 44px;
+    font-size: 22px;
+  }
+
+  .chevron {
+    display: none;
+  }
 }
 </style>

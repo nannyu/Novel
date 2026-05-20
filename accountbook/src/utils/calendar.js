@@ -1,24 +1,40 @@
 import { holidays, extraWorkdays } from '../data/holidays.js'
 
+function parseLocalDate(dateStr) {
+  const [year, month, day] = dateStr.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
+export function getLocalDateString(date = new Date()) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+export function formatTime(timestamp) {
+  if (!timestamp) return ''
+  const date = new Date(timestamp)
+  const h = String(date.getHours()).padStart(2, '0')
+  const m = String(date.getMinutes()).padStart(2, '0')
+  return `${h}:${m}`
+}
+
 const WEEKDAYS_FULL = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
 
 export function isWorkday(dateStr) {
   if (extraWorkdays[dateStr]) return true
   if (holidays[dateStr]) return false
-  const day = new Date(dateStr).getDay()
+  const day = parseLocalDate(dateStr).getDay()
   return day >= 1 && day <= 5
 }
 
 export function isToday(dateStr) {
-  const now = new Date()
-  const y = now.getFullYear()
-  const m = String(now.getMonth() + 1).padStart(2, '0')
-  const d = String(now.getDate()).padStart(2, '0')
-  return dateStr === `${y}-${m}-${d}`
+  return dateStr === getLocalDateString()
 }
 
 export function formatDateChinese(dateStr) {
-  const date = new Date(dateStr)
+  const date = parseLocalDate(dateStr)
   const month = date.getMonth() + 1
   const day = date.getDate()
   const weekday = WEEKDAYS_FULL[date.getDay()]
