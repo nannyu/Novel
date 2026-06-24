@@ -86,7 +86,7 @@ function openAddCategory() {
 }
 
 function confirmAddCategory() {
-  const name = newCategoryName.value.trim()
+  const name = newCategoryName.value.replace(/<[^>]*>/g, '').trim()
   if (!name) return
   addCustomCategory(name)
   categories.value = getAllCategories()

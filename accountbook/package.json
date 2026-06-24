@@ -20,6 +20,7 @@
     "vue-router": "^4.6.4"
   },
   "devDependencies": {
+    "playwright": "^1.60.0",
     "vite-plugin-pwa": "^1.2.0"
   },
   "overrides": {

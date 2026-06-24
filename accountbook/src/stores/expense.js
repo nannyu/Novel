@@ -5,7 +5,6 @@ import { isWorkday } from '../utils/calendar.js'
 import { getCanonicalCategoryKey, getSnackAliasKeys } from '../data/categories.js'
 import {
   deleteExpenseFromCloud,
-  fetchCloudExpenses,
   isCloudStorageEnabled,
   syncAllExpensesToCloud,
   syncExpenseToCloud
@@ -109,18 +108,8 @@ export const useExpenseStore = defineStore('expense', () => {
   async function loadExpenses() {
     const snackAliases = ['retail', ...getSnackAliasKeys()]
     cloudSyncError.value = ''
-    if (isCloudStorageEnabled()) {
-      try {
-        const cloudRows = await fetchCloudExpenses()
-        if (cloudRows.length > 0) {
-          await db.expenses.bulkPut(cloudRows)
-        }
-      } catch (error) {
-        cloudSyncError.value = error.message || '云端数据读取失败'
-        console.warn('Cloud expense load failed:', error)
-      }
-    }
 
+    // 始终从本地缓存加载，立即展示
     const rows = await db.expenses.toArray()
     if (snackAliases.length > 0) {
       const snackAliasSet = new Set(snackAliases)
@@ -132,6 +121,14 @@ export const useExpenseStore = defineStore('expense', () => {
       ...item,
       category: getCanonicalCategoryKey(item.category)
     }))
+
+    // 云端存储开启时，将本地未同步的数据推送到云端
+    if (isCloudStorageEnabled()) {
+      syncLocalExpensesToCloud().catch(error => {
+        cloudSyncError.value = error.message || '云端同步失败'
+        console.warn('Cloud expense sync failed:', error)
+      })
+    }
   }
 
   async function addExpense(data) {

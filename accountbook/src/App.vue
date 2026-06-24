@@ -3,15 +3,24 @@ import { onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useExpenseStore } from './stores/expense.js'
 import BottomNav from './components/BottomNav.vue'
-import { getUserId } from './services/userIdentity.js'
+import { initAuth, migrateOldUserId } from './services/cloudSync.js'
 
 const route = useRoute()
 const store = useExpenseStore()
 
 const isFormPage = computed(() => ['add', 'edit'].includes(route.name))
 
-onMounted(() => {
-  getUserId()
+onMounted(async () => {
+  try {
+    await initAuth()
+  } catch (error) {
+    console.warn('Auth initialization failed:', error)
+  }
+  try {
+    await migrateOldUserId()
+  } catch (error) {
+    console.warn('Old data migration failed:', error)
+  }
   store.loadExpenses()
 })
 </script>

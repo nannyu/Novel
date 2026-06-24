@@ -4,10 +4,15 @@ import { useExpenseStore } from '../stores/expense.js'
 import db from '../db/index.js'
 import { getUserProfile } from '../services/userIdentity.js'
 import {
+  bindUserId,
   deleteAllCloudExpenses,
+  ensureAuthReady,
+  fetchCloudExpenses,
   getStorageMode,
+  getUserId,
   isCloudConfigured,
   isCloudStorageEnabled,
+  resetMigration,
   setStorageMode,
   syncUserProfileToCloud
 } from '../services/cloudSync.js'
@@ -19,6 +24,9 @@ const isSyncing = ref(false)
 const syncStatus = ref('')
 
 const isDebug = import.meta.env.DEV
+const currentUserId = ref(getUserId() || '')
+const showBindInput = ref(false)
+const bindInputValue = ref('')
 const totalRecords = computed(() => store.expenses.length)
 const totalDays = computed(() => new Set(store.expenses.map(item => item.date)).size)
 const displayName = computed(() => userProfile.value.displayName || 'momo')
@@ -32,7 +40,7 @@ const visibleSyncStatus = computed(() => {
 const cloudReady = computed(() => isCloudConfigured())
 const storageHint = computed(() => {
   if (storageMode.value === 'cloud') {
-    return '当前已开启云端备份，本地新增、编辑、删除的记账数据会同步到 Supabase。'
+    return '当前已开启云端备份。数据以本地为准，新增/编辑/删除会自动同步到云端。换设备可通过「数据导入」恢复。'
   }
   return '数据默认保存在浏览器本地 IndexedDB。清除浏览器数据可能导致丢失，建议开启云端存储。'
 })
@@ -40,10 +48,15 @@ const storageHint = computed(() => {
 onMounted(async () => {
   if (isCloudStorageEnabled()) {
     try {
-      userProfile.value = await syncUserProfileToCloud(userProfile.value)
+      await ensureAuthReady()
+      currentUserId.value = getUserId() || ''
+      const name = await syncUserProfileToCloud()
+      if (name) userProfile.value.displayName = name
     } catch (error) {
       syncStatus.value = error.message || '用户资料同步失败'
     }
+  } else {
+    currentUserId.value = getUserId() || ''
   }
 })
 
@@ -57,14 +70,28 @@ async function switchStorageMode(mode) {
     }
 
     isSyncing.value = true
-    syncStatus.value = '正在把本地数据同步到云端...'
+    syncStatus.value = '正在同步数据...'
     try {
+      resetMigration()
+      await ensureAuthReady()
+      currentUserId.value = getUserId() || ''
       setStorageMode('cloud')
       storageMode.value = 'cloud'
-      userProfile.value = await syncUserProfileToCloud(userProfile.value)
+      const name = await syncUserProfileToCloud()
+      if (name) userProfile.value.displayName = name
+
+      // 先从云端拉取已有数据（恢复旧账号数据）
+      const cloudExpenses = await fetchCloudExpenses()
+      if (cloudExpenses.length > 0) {
+        await db.expenses.bulkPut(cloudExpenses)
+        syncStatus.value = isDebug ? `从云端恢复了 ${cloudExpenses.length} 条记录` : '正在同步数据...'
+      }
+
+      // 再把本地数据推到云端
       const count = await store.syncLocalExpensesToCloud()
       await store.loadExpenses()
-      syncStatus.value = isDebug ? `已开启云端存储，已同步 ${count} 条本地记录` : '已开启云端存储'
+      const total = cloudExpenses.length + count
+      syncStatus.value = isDebug ? `已开启云端存储（云端恢复 ${cloudExpenses.length} 条，本地同步 ${count} 条）` : '已开启云端存储'
     } catch (error) {
       setStorageMode('local')
       storageMode.value = 'local'
@@ -81,10 +108,40 @@ async function switchStorageMode(mode) {
   syncStatus.value = '已切换为本地存储'
 }
 
+function handleBindUserId() {
+  const id = bindInputValue.value.trim()
+  if (!id) {
+    alert('请输入用户 ID')
+    return
+  }
+  if (storageMode.value === 'cloud') {
+    alert('请先切换到本地存储，再绑定用户 ID。')
+    return
+  }
+  bindUserId(id)
+  currentUserId.value = id
+  showBindInput.value = false
+  bindInputValue.value = ''
+  alert('绑定成功！切换到云端存储后将使用此 ID 同步数据。')
+}
+
+function copyUserId() {
+  const id = currentUserId.value
+  if (!id) return
+  navigator.clipboard?.writeText(id).then(() => {
+    alert('已复制: ' + id)
+  }).catch(() => {
+    prompt('请手动复制用户 ID:', id)
+  })
+}
+
 async function exportData() {
   try {
     const data = await db.expenses.toArray()
-    const json = JSON.stringify(data, null, 2)
+    const cleaned = data.map(({ id, date, category, amount, paymentMethod, expectedAmount, savingAmount, savingReason, note, createdAt }) => ({
+      id, date, category, amount, paymentMethod, expectedAmount, savingAmount, savingReason, note, createdAt
+    }))
+    const json = JSON.stringify(cleaned, null, 2)
     const blob = new Blob([json], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -96,6 +153,15 @@ async function exportData() {
   } catch {
     alert('导出失败')
   }
+}
+
+function validateImportRecord(item) {
+  if (!item || typeof item !== 'object') return false
+  if (typeof item.id !== 'number' || item.id <= 0 || !Number.isInteger(item.id)) return false
+  if (typeof item.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(item.date)) return false
+  if (typeof item.category !== 'string' || !item.category.trim()) return false
+  if (typeof item.amount !== 'number' || item.amount < 0 || !Number.isFinite(item.amount)) return false
+  return true
 }
 
 async function importData() {
@@ -113,22 +179,31 @@ async function importData() {
         return
       }
 
+      const valid = imported.filter(validateImportRecord)
+      const skipped = imported.length - valid.length
+      if (valid.length === 0) {
+        alert('文件中没有有效的记账记录')
+        return
+      }
+
       const existing = await db.expenses.toArray()
       const existingIds = new Set(existing.map(item => item.id))
-      const duplicates = imported.filter(item => existingIds.has(item.id))
+      const duplicates = valid.filter(item => existingIds.has(item.id))
 
-      const confirmed = duplicates.length > 0
-        ? confirm(`发现 ${duplicates.length} 条与现有数据重复的记录，确定要导入吗？\n\n重复数据将被覆盖。`)
-        : confirm(`确定要导入 ${imported.length} 条记录吗？`)
-      if (!confirmed) return
+      let msg = `共 ${imported.length} 条记录，有效 ${valid.length} 条`
+      if (skipped > 0) msg += `，跳过 ${skipped} 条无效记录`
+      if (duplicates.length > 0) msg += `，其中 ${duplicates.length} 条与现有数据重复将被覆盖`
+      msg += '。确定要导入吗？'
 
-      await db.expenses.bulkPut(imported)
+      if (!confirm(msg)) return
+
+      await db.expenses.bulkPut(valid)
       await store.loadExpenses()
       if (isCloudStorageEnabled()) {
         await store.syncLocalExpensesToCloud()
         syncStatus.value = isDebug ? '导入数据已同步到云端' : '已开启云端存储'
       }
-      alert(`成功导入 ${imported.length} 条记录`)
+      alert(`成功导入 ${valid.length} 条记录`)
     } catch {
       alert('导入失败，请检查文件格式')
     }
@@ -196,6 +271,24 @@ async function clearAll() {
         <div class="storage-hint">{{ storageHint }}</div>
         <div v-if="visibleSyncStatus" class="sync-status">
           {{ visibleSyncStatus }}
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-title">用户 ID</div>
+      <div class="user-id-card glass-card">
+        <div class="user-id-row" @click="copyUserId">
+          <span class="user-id-label">当前 ID</span>
+          <span class="user-id-value">{{ currentUserId || '未生成' }}</span>
+          <span class="user-id-copy">复制</span>
+        </div>
+        <div class="user-id-hint">换设备时输入此 ID 可恢复云端数据。点击可复制。</div>
+        <button v-if="!showBindInput" class="bind-btn" @click="showBindInput = true">绑定已有 ID</button>
+        <div v-else class="bind-input-row">
+          <input v-model="bindInputValue" class="bind-input" placeholder="输入旧用户 ID" />
+          <button class="bind-confirm" @click="handleBindUserId">确定</button>
+          <button class="bind-cancel" @click="showBindInput = false; bindInputValue = ''">取消</button>
         </div>
       </div>
     </section>
@@ -414,6 +507,106 @@ async function clearAll() {
 .action-card {
   overflow: hidden;
   border-radius: var(--radius-xl);
+}
+
+.user-id-card {
+  padding: 16px 18px;
+  border-radius: var(--radius-xl);
+}
+
+.user-id-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 8px 0;
+}
+
+.user-id-label {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.user-id-value {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.user-id-copy {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.user-id-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 4px;
+  margin-bottom: 12px;
+}
+
+.bind-btn {
+  width: 100%;
+  min-height: 40px;
+  border-radius: 12px;
+  color: var(--accent);
+  background: var(--accent-dim);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.bind-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.bind-input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  border: 2px solid rgba(119, 145, 255, 0.3);
+  border-radius: 12px;
+  font-size: 13px;
+  font-family: monospace;
+  outline: none;
+}
+
+.bind-input:focus {
+  border-color: var(--accent);
+}
+
+.bind-confirm {
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 12px;
+  color: #fff;
+  background: linear-gradient(135deg, #7791ff, #4f5df6);
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.bind-cancel {
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 12px;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
 }
 
 .action-btn {

@@ -1,64 +1,64 @@
-# CLAUDE.md
+# AGENTS.md
 
-Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+用于减少 LLM 常见编码错误的行为准则。可根据需要合并项目特定指令。
 
-**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+**权衡：** 这些准则倾向于谨慎而非速度。对于简单任务，请运用判断。
 
-## 1. Think Before Coding
+## 1. 编码前先思考
 
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
+**不要假设。不要隐藏困惑。公开权衡。**
 
-Before implementing:
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
+在实施前：
+- 明确陈述你的假设。如果不确定的，要询问。
+- 如果存在多种解释，要提出它们 - 不要默默选择。
+- 如果有更简单的方法，要说出来。在合理的情况下要提出异议。
+- 如果不清楚，要停止。说明什么令人困惑。询问。
 
-## 2. Simplicity First
+## 2. 简约优先
 
-**Minimum code that solves the problem. Nothing speculative.**
+**用最少的代码解决问题。不要推测性的内容。**
 
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
+- 不要添加要求之外的功能。
+- 不要为单次使用的代码创建抽象。
+- 不要添加未要求的"灵活性"或"可配置性"。
+- 不要为不可能发生的场景添加错误处理。
+- 如果你写了200行代码而实际上可以用50行完成，重写它。
 
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+问自己："资深工程师会说这个过于复杂吗？"如果是，简化它。
 
-## 3. Surgical Changes
+## 3. 精准修改
 
-**Touch only what you must. Clean up only your own mess.**
+**只修改必须修改的内容。只清理自己造成的混乱。**
 
-When editing existing code:
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it - don't delete it.
+编辑现有代码时：
+- 不要"改进"相邻代码、注释或格式。
+- 不要重构没有问题的东西。
+- 匹配现有风格，即使你会用不同的方式。
+- 如果你注意到不相关的死代码，提及它 - 不要删除它。
 
-When your changes create orphans:
-- Remove imports/variables/functions that YOUR changes made unused.
-- Don't remove pre-existing dead code unless asked.
+当你的修改造成孤立代码时：
+- 删除你的修改导致未使用的导入/变量/函数。
+- 不要删除已存在的死代码，除非被要求。
 
-The test: Every changed line should trace directly to the user's request.
+检验标准：每一行修改都应该直接追溯到用户的请求。
 
-## 4. Goal-Driven Execution
+## 4. 目标驱动执行
 
-**Define success criteria. Loop until verified.**
+**定义成功标准。循环直到验证通过。**
 
-Transform tasks into verifiable goals:
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
+将任务转化为可验证的目标：
+- "添加验证" → "为无效输入编写测试，然后让测试通过"
+- "修复 bug" → "编写重现 bug 的测试，然后让测试通过"
+- "重构 X" → "确保重构前后测试都能通过"
 
-For multi-step tasks, state a brief plan:
+对于多步骤任务，陈述简要计划：
 ```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
+1. [步骤] → 验证：[检查]
+2. [步骤] → 验证：[检查]
+3. [步骤] → 验证：[检查]
 ```
 
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+明确成功标准让你能够独立循环。模糊的标准（"让它工作"）需要不断澄清。
 
 ## 5. 项目管理记录
 
@@ -71,12 +71,27 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - 台账内容使用中文记录。
 
 每条变更或 Bug 修复记录必须包含：
-- 时间、标题、描述、是否完成、最终结果。
+- 时间、版本号、标题、描述、是否完成、最终结果。
 - 内容保持简洁、客观、可追溯。
 - 工作完成或结果变化后，及时更新对应记录。
 
+如果子项目存在明确版本号（如 `package.json`、`pyproject.toml`、`Cargo.toml`、应用内 VERSION 文件等），记录项目变更或 Bug 修复时必须同步递增版本号：
+- 默认只递增最后一位版本号。例如当前 `1.0.0`，完成一次变更或 Bug 修复后更新为 `1.0.1`。
+- 最后一位递增到 `99` 后，自动向前一位进位，并将最后一位归零。例如 `1.0.99` 的下一次默认更新为 `1.1.0`。
+- 如果用户明确指定要递增前两位或指定具体版本号，优先遵循用户要求。
+- 该规则只从新增规则之后的项目变更和 Bug 修复开始执行，历史台账和历史版本无需回改。
+
 只有用户明确要求对子项目做项目变更或 Bug 修复时才记录。不要建立仓库级通用总台账。
 
+## 6. 其他要求
+
+若出现接口调不通、数据异常等问题，不允许擅自改成其他替代功能、新增无关兜底逻辑，仅保留原生报错或静默状态即可，除非我明确下达修改指令，否则不得擅自变更原有业务流程与功能设计。
+
+进行任何编程修改时，都要同时考虑手机端和 PC 端两种形态：
+- 按用户明确提出的端侧形态优先修改对应内容，不要把手机端需求误改成 PC 端，或把 PC 端需求误改成手机端。
+- 两端数据保持同步，涉及通用数据、接口、状态、业务逻辑时，应作为共用能力处理。
+- 涉及布局、交互、展示密度、操作入口等端侧差异时，应分别确认手机端和 PC 端的表现是否合理。
+- 每次改动前要判断本次修改属于通用修改、手机端专属修改、PC 端专属修改，还是两端都需要差异化调整；实现和验证时都要覆盖对应端侧。
 ---
 
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+**这些准则生效的标志是：** diff 中不必要的修改更少，因过度复杂化导致的重写更少，澄清性问题在实施前而非错误发生后提出。
